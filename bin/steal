@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# Check if any arguments were provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 ARG1 [ARG2 ARG3 ...]"
+    echo "Example: $0 https://youtube.com/watch?v=example1 package_name"
+    exit 1
+fi
+
+# Downloads folder path
+downloads_folder="$HOME/Downloads"
+
+# Function to check if a string is a URL
+is_url() {
+    local input="$1"
+    [[ "$input" =~ ^https?:// ]] && return 0 || return 1
+}
+
+# Initialize empty arrays to hold packages for paru and flatpak
+paru_packages=()
+flatpak_packages=()
+
+# Loop through all arguments
+for arg in "$@"; do
+    if is_url "$arg"; then
+        echo -e "\033[1mDetected URL: $arg\033[0m"
+        
+        # Get video details to check resolution
+        video_info=$(yt-dlp --get-format --skip-download "$arg")
+        
+        # Check for 4K quality (2160p) and select 1440p if detected
+        if echo "$video_info" | grep -q "2160p"; then
+            echo "4K video detected. Downloading 1440p quality."
+            format="bestvideo[height<=1440]+bestaudio/best[height<=1440]"
+        else
+            echo "Downloading highest quality available."
+            format="bestvideo+bestaudio/best"
+        fi
+        
+        # Download video using yt-dlp with the chosen format
+        yt-dlp -f "$format" -o "$downloads_folder/%(title)s.%(ext)s" "$arg"
+        
+        # Check the exit status of yt-dlp
+        if [ $? -ne 0 ]; then
+            echo "Failed to download from $arg. Skipping..."
+        else
+            echo "Download completed for $arg."
+        fi
+    else
+        # Add package to appropriate list (either paru or flatpak)
+        if [[ "$arg" =~ / ]]; then
+            # If the argument contains a slash, assume it's a flatpak package (e.g., "flatpak install com.example.app")
+            flatpak_packages+=("$arg")
+        else
+            # Otherwise, treat it as a package for paru
+            paru_packages+=("$arg")
+        fi
+    fi
+done
+
+# Install/update packages via paru (if any packages were collected)
+if [ ${#paru_packages[@]} -gt 0 ]; then
+    paru -Syu "${paru_packages[@]}" || { 
+        flatpak_packages+=("${paru_packages[@]}")
+    }
+fi
+
+# Install packages via flatpak (if any packages were collected)
+if [ ${#flatpak_packages[@]} -gt 0 ]; then
+    for package in "${flatpak_packages[@]}"; do
+        flatpak install -y "$package"
+    done
+fi
