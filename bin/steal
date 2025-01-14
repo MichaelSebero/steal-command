@@ -60,7 +60,7 @@ done
 
 # Install/update packages via paru (if any packages were collected)
 if [ ${#paru_packages[@]} -gt 0 ]; then
-    paru -Syu "${paru_packages[@]}" || { 
+    paru -S "${paru_packages[@]}" || { 
         flatpak_packages+=("${paru_packages[@]}")
     }
 fi
